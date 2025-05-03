@@ -129,6 +129,10 @@ resource "azurerm_application_insights" "insights" {
   resource_group_name = azurerm_resource_group.rg.name
   application_type    = "web"
   tags                = var.tags
+  
+  lifecycle {
+    ignore_changes = [ workspace_id ]
+  }
 }
 
 # Grant Function App identity access to Key Vault
