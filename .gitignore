@@ -46,9 +46,9 @@ crash.log
 crash.*.log
 
 # Exclude sensitive variables files
-*.tfvars
-!terraform.tfvars.sample
-!auto.terraform.tfvars
+#*.tfvars
+#!terraform.tfvars.sample
+#!auto.terraform.tfvars
 
 # Exclude CLI configuration files
 .terraformrc
