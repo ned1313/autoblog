@@ -1,7 +1,7 @@
 azure-functions
 azure-identity
 azure-keyvault-secrets
-azure-ai-openai
+openai
 feedparser
 requests
 markdown

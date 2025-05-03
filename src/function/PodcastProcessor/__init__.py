@@ -8,7 +8,7 @@ import feedparser
 import requests
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
-from azure.ai.openai import AzureOpenAI
+from openai import AzureOpenAI
 from github import Github, GithubException
 from jinja2 import Template
 
