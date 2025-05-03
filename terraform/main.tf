@@ -73,7 +73,7 @@ resource "azurerm_cognitive_deployment" "gpt_deployment" {
 
   model {
     format  = "OpenAI"
-    name    = "gpt-35-turbo-16k"  # Using 16k model for larger context window
+    name    = "gpt-4-32k"  # Using 16k model for larger context window
     version = "0613"              # Updated version with larger context support
   }
 
