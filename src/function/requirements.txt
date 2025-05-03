@@ -8,3 +8,4 @@ markdown
 python-dateutil
 PyGithub
 jinja2
+beautifulsoup4

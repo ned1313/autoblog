@@ -11,6 +11,7 @@ from azure.keyvault.secrets import SecretClient
 from openai import AzureOpenAI
 from github import Github, GithubException
 from jinja2 import Template
+from bs4 import BeautifulSoup
 
 # Configure the function app
 app = func.FunctionApp()
@@ -68,25 +69,44 @@ def fetch_rss_feed(rss_url):
         raise
 
 def get_transcript(episode_url):
-    """Attempt to fetch transcript from podcast URL."""
+    """Extract transcript from the 'Episode Transcript' section of the podcast webpage."""
     try:
-        # This is a placeholder. In real implementation, you would:
-        # 1. Check if transcript exists at a known URL pattern based on episode URL
-        # 2. Potentially use a transcription service if not available
+        logging.info(f"Fetching transcript from: {episode_url}")
         
-        # For demonstration, we'll just make a request to the episode URL
-        # and assume a transcript might be in the HTML or linked
+        # Make a request to the episode URL
         response = requests.get(episode_url)
-        
-        # In a real implementation, you would parse the page to find the transcript
-        # For now, returning a placeholder message
-        if response.status_code == 200:
-            # This would be replaced with actual transcript extraction logic
-            return f"Placeholder transcript for episode at {episode_url}. In a real implementation, this would be the actual transcript text extracted from the page or a linked transcript file."
-        else:
+        if response.status_code != 200:
+            logging.warning(f"Failed to fetch page: HTTP {response.status_code}")
             return None
+            
+        # Parse the HTML content with BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Look for a section titled "Episode Transcript"
+        transcript_headers = []
+        for header in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+            if "episode transcript" in header.text.lower():
+                transcript_headers.append(header)
+                
+        if transcript_headers:
+            # Use the first matching header
+            header = transcript_headers[0]
+            transcript_text = []
+            
+            # Collect all paragraph elements that follow the header
+            current = header.find_next()
+            while current and current.name not in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+                if current.name == 'p':
+                    transcript_text.append(current.get_text().strip())
+                current = current.find_next()
+                
+            if transcript_text:
+                return "\n\n".join(transcript_text)
+        
+        logging.warning("No transcript section found on the page")
+        return None
     except Exception as e:
-        logger.error(f"Error fetching transcript: {str(e)}")
+        logging.error(f"Error extracting transcript: {str(e)}")
         return None
 
 def generate_blog_post(episode_title, episode_description, transcript, publish_date, template_content):
@@ -94,13 +114,27 @@ def generate_blog_post(episode_title, episode_description, transcript, publish_d
     try:
         client = init_openai_client()
         
-        # Calculate appropriate token budget
-        # Estimate: 1 token ≈ 4 chars in English, reserve about 1500 tokens for response
-        max_transcript_tokens = 12000  # 16k context - tokens for system, prompt, and response
+        # GPT-4 Turbo model specs
+        # Max input tokens: 128,000
+        # Max output tokens: 4,096
+        # Reserve tokens for system, prompt structure, and response
+        model_name = os.environ["OPENAI_DEPLOYMENT_NAME"]
+        max_output_tokens = int(os.environ.get("MAX_OUTPUT_TOKENS", "4000"))  # Default to slightly under the 4,096 limit
+        
+        # Estimate: 1 token ≈ 4 chars in English for input calculation
+        # Reserve ~10,000 tokens for system prompt, task description, and metadata
+        max_transcript_tokens = 118000  # 128k - 10k reserved
+        max_transcript_chars = max_transcript_tokens * 4
+        
+        # Log original transcript size
+        logging.info(f"Original transcript size: {len(transcript)} characters (approximately {len(transcript)//4} tokens)")
         
         # Truncate transcript if needed but retain as much as possible within token limits
-        transcript_chars = min(len(transcript), max_transcript_tokens * 4)
-        truncated_transcript = transcript[:transcript_chars]
+        if len(transcript) > max_transcript_chars:
+            logging.warning(f"Transcript exceeds token limit, truncating from {len(transcript)} to {max_transcript_chars} characters")
+            truncated_transcript = transcript[:max_transcript_chars]
+        else:
+            truncated_transcript = transcript
         
         # Prepare prompt for blog post generation
         prompt = f"""
@@ -114,26 +148,33 @@ def generate_blog_post(episode_title, episode_description, transcript, publish_d
         {truncated_transcript}
         
         Instructions:
-        1. Create a detailed summary in five substantive paragraphs
+        1. Create a detailed summary in several substantive paragraphs
         2. Use a conversational, informative tone
         3. Include insights and key points from the podcast
         4. Make it engaging and accessible to readers who haven't listened to the podcast
         5. Format the output in markdown
+        6. Include appropriate section headings
+        7. If the transcript discusses code or technical concepts, include explanations
+        8. The podcast is named "Day Two DevOps" and it is hosted by "Ned Bellavance" and "Kyler Middleton"
+        9. The blog post will be published on Ned's blog at nedinthecloud.com
+        10. The blog post should be SEO optimized for the title and keywords related to the podcast episode
         """
         
         # Generate content using Azure OpenAI
+        logging.info(f"Calling Azure OpenAI with {len(truncated_transcript)//4} estimated tokens")
         response = client.chat.completions.create(
-            model=os.environ["OPENAI_DEPLOYMENT_NAME"],
+            model=model_name,
             messages=[
                 {"role": "system", "content": "You are an expert content creator who transforms podcast transcripts into engaging blog posts."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=1500
+            max_tokens=max_output_tokens
         )
         
         # Extract content from response
         blog_content = response.choices[0].message.content.strip()
+        logging.info(f"Generated blog content: {len(blog_content)} characters")
         
         # Render the template with the generated content
         template = Template(template_content)
@@ -228,25 +269,6 @@ draft: false
 """
     return template
 
-def save_processed_episodes(episodes_data):
-    """Save information about processed episodes to avoid reprocessing."""
-    try:
-        with open("processed_episodes.json", "w") as f:
-            json.dump(episodes_data, f)
-    except Exception as e:
-        logger.error(f"Error saving processed episodes: {str(e)}")
-
-def load_processed_episodes():
-    """Load information about previously processed episodes."""
-    try:
-        if os.path.exists("processed_episodes.json"):
-            with open("processed_episodes.json", "r") as f:
-                return json.load(f)
-        return {}
-    except Exception as e:
-        logger.error(f"Error loading processed episodes: {str(e)}")
-        return {}
-
 @app.function_name("PodcastProcessor")
 @app.schedule(schedule=os.environ.get("SCHEDULE", "0 0 */6 * * *"), arg_name="timer", run_on_startup=True)
 def podcast_processor(timer: func.TimerRequest) -> None:
@@ -266,8 +288,9 @@ def podcast_processor(timer: func.TimerRequest) -> None:
         github_repo_name = os.environ["GITHUB_REPO_NAME"]
         posts_path_pattern = os.environ.get("POSTS_PATH_PATTERN", "content/posts")
         
-        # Load previously processed episodes
-        processed_episodes = load_processed_episodes()
+        # Calculate the time threshold (6 hours ago)
+        time_threshold = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=6)
+        logging.info(f"Looking for episodes published after: {time_threshold.isoformat()}")
         
         # Fetch and parse the RSS feed
         feed = fetch_rss_feed(podcast_rss_url)
@@ -280,19 +303,27 @@ def podcast_processor(timer: func.TimerRequest) -> None:
         
         # Process each episode in the feed
         for entry in feed.entries:
-            episode_id = entry.id
-            
-            # Skip if already processed
-            if episode_id in processed_episodes:
-                logging.info(f"Episode {episode_id} already processed, skipping")
+            # Parse publish date
+            if hasattr(entry, 'published'):
+                publish_date = parser.parse(entry.published)
+                # Make sure the date has timezone info for comparison
+                if publish_date.tzinfo is None:
+                    publish_date = publish_date.replace(tzinfo=datetime.timezone.utc)
+            else:
+                logging.warning(f"Episode without publish date, skipping: {entry.title if hasattr(entry, 'title') else 'Unknown'}")
                 continue
-            
+                
+            # Skip episodes published before our time threshold
+            if publish_date <= time_threshold:
+                logging.info(f"Episode published before threshold ({publish_date.isoformat()}), skipping")
+                continue
+                
+            episode_id = entry.id
             episode_title = entry.title
             episode_description = entry.description if hasattr(entry, 'description') else ""
             episode_link = entry.link
-            publish_date = parser.parse(entry.published) if hasattr(entry, 'published') else datetime.datetime.now()
             
-            logging.info(f"Processing episode: {episode_title}")
+            logging.info(f"Processing new episode: {episode_title}, published at {publish_date.isoformat()}")
             
             # Get transcript
             transcript = get_transcript(episode_link)
@@ -311,13 +342,23 @@ def podcast_processor(timer: func.TimerRequest) -> None:
             
             # Format date for file naming
             date_str = publish_date.strftime('%Y-%m-%d')
+            year_str = publish_date.strftime('%Y')
+            month_str = publish_date.strftime('%m')
             
             # Create a slug from the title
             slug = episode_title.lower().replace(" ", "-")
             slug = ''.join(c if c.isalnum() or c == '-' else '' for c in slug)
             
-            # File path in the GitHub repo
-            file_path = f"{posts_path_pattern}/{date_str}-{slug}.md"
+            # Parse the path pattern and replace placeholders
+            file_path = posts_path_pattern
+            # Replace YYYY with the year
+            file_path = file_path.replace("YYYY", year_str)
+            # Replace MM with the month
+            file_path = file_path.replace("MM", month_str)
+            # Replace post-title with the slug
+            file_path = file_path.replace("post-title", slug)
+            
+            logging.info(f"Generated file path: {file_path}")
             
             # Branch name
             branch_name = f"podcast-post-{date_str}-{slug[:20]}"
@@ -349,18 +390,6 @@ def podcast_processor(timer: func.TimerRequest) -> None:
                     f"Add blog post for podcast: {episode_title}",
                     f"Automatically generated blog post from podcast episode published on {date_str}."
                 )
-                
-                # Mark episode as processed
-                processed_episodes[episode_id] = {
-                    "title": episode_title,
-                    "date": date_str,
-                    "file_path": file_path,
-                    "pr_number": pr.number if pr else None,
-                    "processed_at": datetime.datetime.now().isoformat()
-                }
-                
-                # Save updated processed episodes list
-                save_processed_episodes(processed_episodes)
                 
                 logging.info(f"Successfully processed episode: {episode_title}")
             else:
