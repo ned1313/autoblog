@@ -1,0 +1,20 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "PODCAST_RSS_URL": "https://your-podcast-rss-url.com/feed",
+    "SCHEDULE": "0 */30 * * * *",
+    "GITHUB_REPO_OWNER": "your-github-username",
+    "GITHUB_REPO_NAME": "your-blog-repo",
+    "POSTS_PATH_PATTERN": "content/posts",
+    "TEMPLATE_FILE_PATH": "templates/blog-template.md",
+    "KeyVaultName": "kv-autoblog-dev",
+    "OPENAI_ENDPOINT": "https://your-openai.openai.azure.com/",
+    "OPENAI_DEPLOYMENT_NAME": "gpt-deployment",
+    
+    "AZURE_CLIENT_ID": "",
+    "AZURE_TENANT_ID": "",
+    "AZURE_CLIENT_SECRET": ""
+  }
+}

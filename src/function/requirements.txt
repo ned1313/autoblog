@@ -1,0 +1,10 @@
+azure-functions
+azure-identity
+azure-keyvault-secrets
+azure-ai-openai
+feedparser
+requests
+markdown
+python-dateutil
+PyGithub
+jinja2

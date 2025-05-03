@@ -1,0 +1,9 @@
+project_name        = "autoblog"
+environment         = "dev"
+location            = "eastus"
+podcast_rss_url     = "https://your-podcast-feed.com/rss"
+github_repo_owner   = "your-github-username"
+github_repo_name    = "your-blog-repo"
+posts_path_pattern  = "content/posts"
+# Don't commit this file with the actual token
+github_token        = "your-github-personal-access-token"
