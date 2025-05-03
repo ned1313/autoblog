@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.' # set this to the path to your web app project, defaults to the repository root
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: './src/function' # updated to the path of the function app project
   PYTHON_VERSION: '3.10' # set this to the python version to use (supports 3.6, 3.7, 3.8)
 
 jobs:
@@ -36,11 +36,13 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
-
+        
       # Optional: Add step to run tests here
 
       - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
+        run: |
+          cd src
+          zip -r ../release.zip ./function/* 
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -79,5 +81,4 @@ jobs:
         with:
           app-name: 'func-autoblog-dev'
           slot-name: 'Production'
-          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
-          
+          package: '.'
