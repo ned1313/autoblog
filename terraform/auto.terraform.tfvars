@@ -1,7 +1,0 @@
-project_name        = "autoblog"
-environment         = "dev"
-location            = "eastus"
-podcast_rss_url     = "https://feeds.packetpushers.net/day2cloud/"
-github_repo_owner   = "ned1313"
-github_repo_name    = "ned-in-the-cloud"
-posts_path_pattern  = "content/blog/YYYY/MM/post-title/index.md"
